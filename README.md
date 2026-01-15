@@ -1,4 +1,4 @@
-# flavor-fusion-ai
+# recipes_alternatives
 recipes generator
 
 The intention of this app is to give a chance to transform a recipe based on one that we will input. 
