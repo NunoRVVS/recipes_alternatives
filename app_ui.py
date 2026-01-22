@@ -29,7 +29,7 @@ def get_image_as_base64(path: str) -> str:
             return base64.b64encode(img_file.read()).decode()
     except FileNotFoundError:
         st.error("Icon file not found. Please check the path to 'images/recipe_icon.png'")
-        return None
+        return "None"
 
 def parse_recipe_text(text):
     """A simple helper to format the AI's text response for display."""
