@@ -1,10 +1,12 @@
 import streamlit as st
 import requests
 import json
+import base64
+from pathlib import Path
 
 # --- CONFIGURATION ---
 st.set_page_config(
-    page_title="Flavor Fusion AI",
+    page_title="Recipes Alternatives AI",
     page_icon="🍳",
     layout="centered"
 )
@@ -20,6 +22,15 @@ if 'recipe_id' not in st.session_state:
     st.session_state.recipe_id = None
 
 # --- HELPER FUNCTIONS ---
+def get_image_as_base64(path: str) -> str:
+    """Reads an image file and returns its base64 encoded string."""
+    try:
+        with open(path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except FileNotFoundError:
+        st.error("Icon file not found. Please check the path to 'images/recipe_icon.png'")
+        return None
+
 def parse_recipe_text(text):
     """A simple helper to format the AI's text response for display."""
     # In a more robust app, you'd use regex or expect JSON from the AI
@@ -27,7 +38,11 @@ def parse_recipe_text(text):
     return text
 
 # --- UI LAYOUT ---
-st.markdown("<h1 style='text-align: center;'>🍳 Flavor Fusion AI</h1>", unsafe_allow_html=True)
+img_path = Path(__file__).parent / "images" / "recipe_icon.png"
+img_base64 = get_image_as_base64(str(img_path))
+
+title_html = f"<h1 style='text-align: center;'><img src='data:image/png;base64,{img_base64}' width='50'> Recipes Alternatives AI</h1>" if img_base64 else "<h1 style='text-align: center;'>🍳 Recipes Alternatives AI</h1>"
+st.markdown(title_html, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Create and transform recipes with the power of AI.</p>", unsafe_allow_html=True)
 st.divider()
 
