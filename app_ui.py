@@ -10,7 +10,11 @@ st.set_page_config(
 )
 
 # The URL where your FastAPI backend is running
-API_URL = "http://localhost:8000"
+# Try to get from secrets (for cloud), fallback to localhost (for local dev)
+try:
+    API_URL = st.secrets["API_URL"]
+except (FileNotFoundError, KeyError):
+    API_URL = "http://localhost:8000"
 
 # --- SESSION STATE ---
 # To remember the last generated recipe and its ID

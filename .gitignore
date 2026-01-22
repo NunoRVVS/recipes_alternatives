@@ -1,5 +1,6 @@
 # Secrets
 .env
+secrets.toml
 
 # Python folders
 __pycache__/
