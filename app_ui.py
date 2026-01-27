@@ -1,6 +1,7 @@
 import streamlit as st
-import requests
 import json
+from google import genai
+from google.genai import types
 
 # --- CONFIGURATION ---
 st.set_page_config(
@@ -9,12 +10,14 @@ st.set_page_config(
     layout="centered"
 )
 
-# The URL where your FastAPI backend is running
-# Try to get from secrets (for cloud), fallback to localhost (for local dev)
+# --- API SETUP ---
 try:
-    API_URL = st.secrets["API_URL"]
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except (FileNotFoundError, KeyError):
-    API_URL = "http://localhost:8000"
+    st.error("GOOGLE_API_KEY not found in secrets. Please add it in .streamlit/secrets.toml or Streamlit Cloud Secrets.")
+    st.stop()
+
+client = genai.Client(api_key=GOOGLE_API_KEY)
 
 # --- SESSION STATE ---
 # To remember the last generated recipe and its ID
@@ -24,11 +27,14 @@ if 'recipe_id' not in st.session_state:
     st.session_state.recipe_id = None
 
 # --- HELPER FUNCTIONS ---
-def parse_recipe_text(text):
-    """A simple helper to format the AI's text response for display."""
-    # In a more robust app, you'd use regex or expect JSON from the AI
-    # For now, we'll just display the raw text in a formatted way.
-    return text
+def parse_recipe_text(recipe_data):
+    """Formats the recipe dictionary into a Markdown string."""
+    if isinstance(recipe_data, str):
+        return recipe_data
+        
+    return f"#### {recipe_data.get('title', 'Untitled')}\n\n**Ingredients:**\n" + \
+           "\n".join(f"- {ing}" for ing in recipe_data.get('ingredients', [])) + \
+           f"\n\n**Instructions:**\n{recipe_data.get('instructions', '')}"
 
 # --- UI LAYOUT ---
 col1, col2 = st.columns([1, 5])
@@ -62,18 +68,11 @@ if submitted:
             "instructions": instructions
         }
         
-        with st.spinner("Saving your recipe to the database..."):
-            try:
-                response = requests.post(f"{API_URL}/recipes/", json=recipe_payload)
-                if response.status_code == 200:
-                    result = response.json()
-                    st.session_state.recipe_id = result.get("id")
-                    st.session_state.recipe_data = recipe_payload # Store the full recipe data
-                    st.success(f"Recipe '{title}' saved with ID: {st.session_state.recipe_id}!")
-                else:
-                    st.error(f"Failed to save recipe. Server responded with: {response.text}")
-            except requests.exceptions.ConnectionError:
-                st.error("Connection Error: Could not connect to the backend API. Is it running?")
+        with st.spinner("Saving your recipe..."):
+            # In standalone mode, we just save to session state
+            st.session_state.recipe_data = recipe_payload
+            st.session_state.recipe_id = 1 # Dummy ID for compatibility
+            st.success(f"Recipe '{title}' saved!")
 
 # --- DISPLAY AND TRANSFORM SECTION ---
 if st.session_state.recipe_data:
@@ -100,20 +99,28 @@ if st.session_state.recipe_data:
     if st.button(f"Transform to {transformation}", disabled=(not transformation)):
         with st.spinner(f"AI is creating a {transformation} version..."):
             try:
-                # Call your FastAPI transform endpoint
-                response = requests.post(
-                    f"{API_URL}/recipes/{st.session_state.recipe_id}/transform?transformation_type={transformation}"
+                # Prepare Prompt (Logic moved from main.py)
+                target = st.session_state.recipe_data
+                prompt = (
+                    f"You are a cooking assistant. Convert this recipe into a {transformation} version. "
+                    f"Original: {target['title']}. Ingredients: {target['ingredients']}. Instructions: {target['instructions']}. "
+                    "Return ONLY a JSON object with keys: 'title', 'ingredients' (list of strings), and 'instructions' (string)."
                 )
-                if response.status_code == 200:
-                    transformed_recipe_text = response.json()['transformed_recipe']
-                    
-                    # Display the new recipe
-                    st.success("Transformation complete!")
-                    st.subheader(f"✨ Transformed: {transformation} Version")
-                    with st.container(border=True, height=300):
-                         st.markdown(parse_recipe_text(transformed_recipe_text))
-                else:
-                    st.error(f"Transformation failed. Server responded with: {response.text}")
 
-            except requests.exceptions.ConnectionError:
-                st.error("Connection Error: Could not connect to the backend API.")
+                # Call Gemini directly
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash-001",
+                    contents=prompt,
+                    config={"response_mime_type": "application/json"}
+                )
+                
+                transformed_recipe_data = json.loads(response.text)
+                
+                # Display the new recipe
+                st.success("Transformation complete!")
+                st.subheader(f"✨ Transformed: {transformation} Version")
+                with st.container(border=True, height=300):
+                        st.markdown(parse_recipe_text(transformed_recipe_data))
+
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
